@@ -18,8 +18,10 @@ writeFileSync(join(STATE, 'access.json'), JSON.stringify({
   dmPolicy: 'allowlist', allowFrom: ['1'], groups: { [String(G)]: { requireMention: false, allowFrom: ['1'] } },
 }))
 const spawnLog = join(dir, 'spawn.log')
+// don't inherit another session's role/route (a developer shell may itself be a Telegram client)
+const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^TELEGRAM_/.test(k)))
 const baseEnv = {
-  ...process.env, TELEGRAM_BOT_TOKEN: TOKEN, TELEGRAM_API_ROOT: `http://localhost:${PORT}`, TELEGRAM_STATE_DIR: STATE,
+  ...cleanEnv, TELEGRAM_BOT_TOKEN: TOKEN, TELEGRAM_API_ROOT: `http://localhost:${PORT}`, TELEGRAM_STATE_DIR: STATE,
   TELEGRAM_ACCESS_MODE: 'static', TELEGRAM_ROUTER_SOCK: join(STATE, 'router.sock'),
 } as Record<string, string>
 
@@ -112,6 +114,22 @@ try {
   assert.deepEqual(s40.perms[0], { request_id: 'abcde', behavior: 'allow' }); assert.equal(sdm.perms.length, 0); ok('permission button routed to the session that asked')
   mock.push(dmMsg(user, 'yes fghij'))
   await Bun.sleep(400); assert.equal(sdm.inbox.length, 1); ok('permission-looking text is intercepted, not delivered as chat')
+
+  // 5b. DM topics (threaded mode): own route per topic, replies carry the thread, main DM stays separate
+  const dmTopic = (text: string, thread: number, title?: string) => ({
+    message_id: ++mid, date: 1, from: user, chat: { id: 1, type: 'private', first_name: 'A' }, text, is_topic_message: true, message_thread_id: thread,
+    reply_to_message: title ? { message_id: thread, date: 1, chat: { id: 1, type: 'private', first_name: 'A' }, forum_topic_created: { name: title, icon_color: 0 } } : undefined,
+  })
+  mock.push(dmTopic('in dm topic', 7, 'Belanja'))
+  await until(() => spawned().some(l => l.startsWith('dm:1:7|')))
+  assert.ok(spawned().includes('dm:1:7|Belanja')); ok('DM topic gets its own route and title')
+  const sdt = await startClient('dm:1:7', true)
+  await until(() => sdt.inbox.length >= 1)
+  assert.equal(sdt.inbox[0].meta.thread_id, '7'); assert.equal(sdt.inbox[0].meta.topic_title, 'Belanja'); ok('DM topic meta carries thread_id and topic_title')
+  r = await reply(sdt, { chat_id: '1', text: 'jawab dm topic' })
+  assert.ok(!r.isError); assert.equal(mock.sent().at(-1).message_thread_id, 7); ok('DM topic reply lands in the same thread')
+  assert.equal(sdm.inbox.length, 1); ok('main DM session did not receive the DM topic message')
+  await sdt.client.close()
 
   // 6. housekeeping
   const routes = JSON.parse(readFileSync(join(STATE, 'routes.json'), 'utf8'))

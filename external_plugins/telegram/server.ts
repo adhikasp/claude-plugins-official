@@ -1056,7 +1056,8 @@ async function handleInbound(
 // ---------------------------------------------------------------------------
 
 function parseRoute(): { chat: string; thread: number } {
-  if (ROUTE.startsWith('dm:')) return { chat: ROUTE.slice(3), thread: 0 }
+  // dm:<user_id>[:<thread_id>]  (DM topics, Bot API 9.3 threaded mode)
+  if (ROUTE.startsWith('dm:')) { const [chat, thread] = ROUTE.slice(3).split(':'); return { chat: chat!, thread: Number(thread) || 0 } }
   const i = ROUTE.lastIndexOf(':')
   return { chat: ROUTE.slice(0, i), thread: Number(ROUTE.slice(i + 1)) || 0 }
 }
@@ -1178,16 +1179,24 @@ function learnTopic(chat: string, thread: number | undefined, name: string | und
 
 function routeFor(ctx: Context): RouteInfo {
   const chat = String(ctx.chat!.id)
-  if (ctx.chat!.type === 'private') return { route: `dm:${ctx.from!.id}`, chat, thread: 0 }
   const m: any = ctx.message ?? {}
   const thread: number = m.is_topic_message ? (m.message_thread_id ?? 0) : 0
   learnTopic(chat, thread, m.reply_to_message?.forum_topic_created?.name)
+  if (ctx.chat!.type === 'private') {
+    // DM with threaded mode: each topic is its own route; the main thread stays dm:<user_id>
+    return { route: thread ? `dm:${ctx.from!.id}:${thread}` : `dm:${ctx.from!.id}`, chat, thread, topicTitle: thread ? topics[chat]?.[String(thread)] : undefined }
+  }
   const c: any = ctx.chat
   return {
     route: `${chat}:${thread}`, chat, thread,
     chatTitle: c.title,
     topicTitle: thread ? topics[chat]?.[String(thread)] : (c.is_forum ? 'General' : undefined),
   }
+}
+
+function topicChatAllowed(ctx: Context): boolean {
+  const a = loadAccess()
+  return String(ctx.chat!.id) in a.groups || (ctx.chat!.type === 'private' && a.allowFrom.includes(String(ctx.from?.id)))
 }
 
 function touch(info: RouteInfo): void {
@@ -1284,7 +1293,7 @@ if (ROLE === 'router') {
   if (process.env.TELEGRAM_REAP_CMD) {
     setInterval(() => {
       for (const [route, r] of Object.entries(registry)) {
-        if (route.startsWith('dm:') || !clients.has(route) || Date.now() - (r.lastActive ?? 0) < reapMs) continue
+        if (/^dm:\d+$/.test(route) || !clients.has(route) || Date.now() - (r.lastActive ?? 0) < reapMs) continue
         Bun.spawn(['bash', '-c', process.env.TELEGRAM_REAP_CMD!], { env: { ...process.env, TG_ROUTE: route }, stdout: 'ignore', stderr: 'inherit' })
       }
     }, 300_000).unref()
@@ -1292,11 +1301,11 @@ if (ROLE === 'router') {
 
   bot.on('message:forum_topic_created', ctx => {
     const m: any = ctx.message
-    if (String(ctx.chat.id) in loadAccess().groups) learnTopic(String(ctx.chat.id), m.message_thread_id ?? m.message_id, m.forum_topic_created?.name)
+    if (topicChatAllowed(ctx)) learnTopic(String(ctx.chat.id), m.message_thread_id ?? m.message_id, m.forum_topic_created?.name)
   })
   bot.on('message:forum_topic_edited', ctx => {
     const m: any = ctx.message
-    if (String(ctx.chat.id) in loadAccess().groups) learnTopic(String(ctx.chat.id), m.message_thread_id, m.forum_topic_edited?.name)
+    if (topicChatAllowed(ctx)) learnTopic(String(ctx.chat.id), m.message_thread_id, m.forum_topic_edited?.name)
   })
 }
 
