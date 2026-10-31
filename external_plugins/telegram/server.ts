@@ -407,6 +407,9 @@ function chunk(text: string, limit: number, mode: 'length' | 'newline'): string[
 // .jpg/.jpeg/.png/.gif/.webp go as photos (Telegram compresses + shows inline);
 // everything else goes as documents (raw file, no compression).
 const PHOTO_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp'])
+const VOICE_EXTS = new Set(['.ogg', '.oga', '.opus'])
+const AUDIO_EXTS = new Set(['.mp3', '.m4a', '.wav', '.flac'])
+const VIDEO_EXTS = new Set(['.mp4', '.mov', '.webm'])
 
 const mcp = new Server(
   { name: 'telegram', version: '1.0.0' },
@@ -619,6 +622,15 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
           }
           if (PHOTO_EXTS.has(ext)) {
             const sent = await bot.api.sendPhoto(chat_id, input, opts)
+            sentIds.push(sent.message_id)
+          } else if (VOICE_EXTS.has(ext)) {
+            const sent = await bot.api.sendVoice(chat_id, input, opts)
+            sentIds.push(sent.message_id)
+          } else if (AUDIO_EXTS.has(ext)) {
+            const sent = await bot.api.sendAudio(chat_id, input, opts)
+            sentIds.push(sent.message_id)
+          } else if (VIDEO_EXTS.has(ext)) {
+            const sent = await bot.api.sendVideo(chat_id, input, opts)
             sentIds.push(sent.message_id)
           } else {
             const sent = await bot.api.sendDocument(chat_id, input, opts)
@@ -998,6 +1010,14 @@ async function handleInbound(
 
   const imagePath = downloadImage ? await downloadImage() : undefined
 
+  // Swipe-reply context: the message being replied to (not the topic-root service message).
+  const rm = ctx.message?.reply_to_message
+  const replyTo = rm && !rm.forum_topic_created ? rm : undefined
+  const replyText = replyTo
+    ? (replyTo.text ?? replyTo.caption ?? '').replace(/\s+/g, ' ').trim().slice(0, 400)
+      || (replyTo.photo ? '[photo]' : replyTo.voice ? '[voice]' : replyTo.document ? '[document]' : '')
+    : ''
+
   // image_path goes in meta only — an in-content "[image attached — read: PATH]"
   // annotation is forgeable by any allowlisted sender typing that string.
   const channelParams = {
@@ -1009,6 +1029,11 @@ async function handleInbound(
         user: from.username ?? String(from.id),
         user_id: String(from.id),
         ts: new Date((ctx.message?.date ?? 0) * 1000).toISOString(),
+        ...(replyTo ? {
+          reply_to_message_id: String(replyTo.message_id),
+          ...(replyTo.from ? { reply_to_user: replyTo.from.username ?? String(replyTo.from.id) } : {}),
+          ...(replyText ? { reply_to_text: replyText } : {}),
+        } : {}),
         ...(imagePath ? { image_path: imagePath } : {}),
         ...(attachment ? {
           attachment_kind: attachment.kind,
