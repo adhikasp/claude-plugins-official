@@ -24,6 +24,13 @@ import { homedir } from 'os'
 import { execFileSync } from 'child_process'
 import { join, extname, sep } from 'path'
 
+// Only the dedicated always-on session (scripts/semar/telegram-session/start sets this) may poll.
+// Any other claude that loads this plugin would SIGTERM the real poller via bot.pid below.
+if (process.env.TELEGRAM_POLLER !== '1') {
+  process.stderr.write('telegram channel: TELEGRAM_POLLER!=1, not polling (not the dedicated session)\n')
+  process.exit(0)
+}
+
 const STATE_DIR = process.env.TELEGRAM_STATE_DIR
   ?? join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'), 'channels', 'telegram')
 const ACCESS_FILE = join(STATE_DIR, 'access.json')
