@@ -1247,6 +1247,12 @@ if (ROLE === 'router') {
           let f: any
           try { f = JSON.parse(line) } catch { continue }
           if (f.type === 'hello' && typeof f.route === 'string') {
+            // First live client wins: a stray process that inherited TELEGRAM_ROUTE (e.g. a claude spawned
+            // from inside a session's shell) must not steal the route.
+            if (clients.has(f.route)) {
+              process.stderr.write(`router: duplicate client for ${f.route} rejected\n`)
+              s.end(); continue
+            }
             s.data.route = f.route
             clients.set(f.route, s)
             const t = spawning.get(f.route); if (t) { clearTimeout(t); spawning.delete(f.route) }
