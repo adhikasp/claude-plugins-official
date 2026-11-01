@@ -26,7 +26,8 @@ const baseEnv = {
 } as Record<string, string>
 
 const mock = startMock(PORT, TOKEN)
-const router = Bun.spawn(['bun', SERVER], {
+// ROUTER_BIN=router-rs/target/release/tg-router runs the Rust router instead of server.ts
+const router = Bun.spawn(process.env.ROUTER_BIN ? [process.env.ROUTER_BIN] : ['bun', SERVER], {
   env: { ...baseEnv, TELEGRAM_ROLE: 'router', TELEGRAM_SPAWN_CMD: `echo "$TG_ROUTE|$TG_TITLE" >> ${spawnLog}` },
   stdout: 'ignore', stderr: 'inherit',
 })

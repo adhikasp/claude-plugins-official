@@ -17,7 +17,7 @@ const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => 
   TELEGRAM_BOT_TOKEN: TOKEN, TELEGRAM_API_ROOT: `http://localhost:${PORT}`, TELEGRAM_STATE_DIR: STATE,
   TELEGRAM_ACCESS_MODE: 'static', TELEGRAM_ROUTER_SOCK: join(STATE, 'router.sock') } as Record<string, string>
 const mock = startMock(PORT, TOKEN)
-const startRouter = () => Bun.spawn(['bun', SERVER], { env: { ...env, TELEGRAM_ROLE: 'router', TELEGRAM_SPAWN_CMD: 'true' }, stdout: 'ignore', stderr: 'ignore' })
+const startRouter = () => Bun.spawn(process.env.ROUTER_BIN ? [process.env.ROUTER_BIN] : ['bun', SERVER], { env: { ...env, TELEGRAM_ROLE: 'router', TELEGRAM_SPAWN_CMD: 'true' }, stdout: 'ignore', stderr: 'ignore' })
 let router = startRouter()
 const inbox: any[] = []
 const client = new Client({ name: 't', version: '0' }, { capabilities: {} })
