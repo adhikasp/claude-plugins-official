@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Drive the live plugin as @semar_qa_bot (no brain behind it; the driving agent is the only user).
+# usage: qa-send [--topic THREAD_ID] [--chat CHAT_ID] [--reply-to MSG_ID] "text"
+# Env: TELEGRAM_QA_BOT_TOKEN and TELEGRAM_QA_CHAT (group id) come from the environment or the file in $TELEGRAM_QA_ENV (default ./.env). Token is never printed.
+set -euo pipefail
+CHAT="${TELEGRAM_QA_CHAT:-}"; TOPIC=""; REPLY=""
+while [[ ${1:-} == --* ]]; do case $1 in
+  --topic) TOPIC=$2; shift 2;; --chat) CHAT=$2; shift 2;; --reply-to) REPLY=$2; shift 2;; *) echo "bad flag $1" >&2; exit 2;; esac; done
+TEXT=${1:?usage: qa-send [--topic N] [--chat ID] [--reply-to N] "text"}
+: "${CHAT:?set TELEGRAM_QA_CHAT or pass --chat}"
+ENVF=${TELEGRAM_QA_ENV:-.env}; [[ -f $ENVF ]] && set -a && source "$ENVF" && set +a; T=${TELEGRAM_QA_BOT_TOKEN:?set TELEGRAM_QA_BOT_TOKEN}
+args=(-d "chat_id=$CHAT" --data-urlencode "text=$TEXT")
+[[ -n $TOPIC ]] && args+=(-d "message_thread_id=$TOPIC")
+[[ -n $REPLY ]] && args+=(-d "reply_to_message_id=$REPLY")
+curl -s -X POST "https://api.telegram.org/bot$T/sendMessage" "${args[@]}" | jq -c '{ok,message_id:.result.message_id,err:.description}'
