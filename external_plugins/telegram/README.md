@@ -1,3 +1,9 @@
+> **Fork note (2026-11-01):** the TypeScript `server.ts` is gone. This fork is two small Rust binaries:
+> `router-rs/` (`tg-router`: the single Bot API poller, access gate, route registry, and one MCP server per session) and
+> `bridge/` (`tg-bridge`: a ~2 MB stdio↔unix-socket relay launched by `.mcp.json`; reconnects and replays the MCP handshake if the router restarts).
+> Build and install with `bun run build && bun run install-bins` (or `cargo build --release` in each dir, then copy to `~/.local/bin`).
+> Tests (need `bun install` for the MCP SDK client): `bun run test`. Pairing mode is not supported (static allowlist only); manage `access.json` by hand.
+
 # Telegram
 
 Connect a Telegram bot to your Claude Code with an MCP server.

@@ -9,15 +9,16 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
-const TOKEN = 'T', PORT = 18997, SERVER = resolve(import.meta.dir, '..', 'server.ts')
-const BRIDGE = process.env.BRIDGE!; assert.ok(BRIDGE, 'set BRIDGE')
+const TOKEN = 'T', PORT = 18997
+const ROUTER_BIN = process.env.ROUTER_BIN ?? resolve(import.meta.dir, '..', 'router-rs/target/release/tg-router')
+const BRIDGE = process.env.BRIDGE ?? resolve(import.meta.dir, '..', 'bridge/target/release/tg-bridge')
 const dir = mkdtempSync(join(tmpdir(), 'tg-rst-')); const STATE = join(dir, 's'); Bun.spawnSync(['mkdir', '-p', STATE])
 writeFileSync(join(STATE, 'access.json'), JSON.stringify({ dmPolicy: 'allowlist', allowFrom: ['1'], groups: {} }))
 const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^TELEGRAM_/.test(k))),
   TELEGRAM_BOT_TOKEN: TOKEN, TELEGRAM_API_ROOT: `http://localhost:${PORT}`, TELEGRAM_STATE_DIR: STATE,
   TELEGRAM_ACCESS_MODE: 'static', TELEGRAM_ROUTER_SOCK: join(STATE, 'router.sock') } as Record<string, string>
 const mock = startMock(PORT, TOKEN)
-const startRouter = () => Bun.spawn(process.env.ROUTER_BIN ? [process.env.ROUTER_BIN] : ['bun', SERVER], { env: { ...env, TELEGRAM_ROLE: 'router', TELEGRAM_SPAWN_CMD: 'true' }, stdout: 'ignore', stderr: 'ignore' })
+const startRouter = () => Bun.spawn([ROUTER_BIN], { env: { ...env, TELEGRAM_SPAWN_CMD: 'true' }, stdout: 'ignore', stderr: 'ignore' })
 let router = startRouter()
 const inbox: any[] = []
 const client = new Client({ name: 't', version: '0' }, { capabilities: {} })

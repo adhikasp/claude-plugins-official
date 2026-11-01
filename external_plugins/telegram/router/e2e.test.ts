@@ -11,7 +11,8 @@ import { join, resolve } from 'node:path'
 
 const TOKEN = 'TESTTOKEN', PORT = 18998
 const G = -1001, DM = 1
-const SERVER = resolve(import.meta.dir, '..', 'server.ts')
+const ROUTER_BIN = process.env.ROUTER_BIN ?? resolve(import.meta.dir, '..', 'router-rs/target/release/tg-router')
+const BRIDGE = process.env.BRIDGE ?? resolve(import.meta.dir, '..', 'bridge/target/release/tg-bridge')
 const dir = mkdtempSync(join(tmpdir(), 'tg-e2e-'))
 const STATE = join(dir, 'state'); Bun.spawnSync(['mkdir', '-p', STATE])
 writeFileSync(join(STATE, 'access.json'), JSON.stringify({
@@ -27,8 +28,8 @@ const baseEnv = {
 
 const mock = startMock(PORT, TOKEN)
 // ROUTER_BIN=router-rs/target/release/tg-router runs the Rust router instead of server.ts
-const router = Bun.spawn(process.env.ROUTER_BIN ? [process.env.ROUTER_BIN] : ['bun', SERVER], {
-  env: { ...baseEnv, TELEGRAM_ROLE: 'router', TELEGRAM_SPAWN_CMD: `echo "$TG_ROUTE|$TG_TITLE" >> ${spawnLog}` },
+const router = Bun.spawn([ROUTER_BIN], {
+  env: { ...baseEnv, TELEGRAM_SPAWN_CMD: `echo "$TG_ROUTE|$TG_TITLE" >> ${spawnLog}` },
   stdout: 'ignore', stderr: 'inherit',
 })
 
@@ -42,8 +43,8 @@ async function startClient(route: string, admin = false): Promise<Sess> {
   }
   await client.connect(new StdioClientTransport({
     // BRIDGE=/path/to/tg-bridge runs every client through the Rust relay instead of an in-process bun client
-    command: process.env.BRIDGE ?? 'bun', args: process.env.BRIDGE ? [] : [SERVER],
-    env: { ...baseEnv, TELEGRAM_ROLE: 'client', TELEGRAM_ROUTE: route, ...(admin ? { TELEGRAM_ROUTE_ADMIN: '1' } : {}) },
+    command: BRIDGE, args: [],
+    env: { ...baseEnv, TELEGRAM_ROUTE: route, ...(admin ? { TELEGRAM_ROUTE_ADMIN: '1' } : {}) },
   }))
   return s
 }

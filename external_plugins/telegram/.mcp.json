@@ -4,7 +4,7 @@
       "command": "sh",
       "args": [
         "-c",
-        "B=\"${TELEGRAM_BRIDGE:-$HOME/.local/bin/tg-bridge}\"; if [ -x \"$B\" ]; then exec \"$B\"; fi; exec bun run --cwd \"${CLAUDE_PLUGIN_ROOT}\" --shell=bun --silent start"
+        "exec \"${TELEGRAM_BRIDGE:-$HOME/.local/bin/tg-bridge}\""
       ]
     }
   }

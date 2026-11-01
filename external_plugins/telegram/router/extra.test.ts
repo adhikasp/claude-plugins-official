@@ -8,7 +8,9 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
-const TOKEN = 'T2', PORT = 18996, SERVER = resolve(import.meta.dir, '..', 'server.ts')
+const TOKEN = 'T2', PORT = 18996
+const ROUTER_BIN = process.env.ROUTER_BIN ?? resolve(import.meta.dir, '..', 'router-rs/target/release/tg-router')
+const BRIDGE = process.env.BRIDGE ?? resolve(import.meta.dir, '..', 'bridge/target/release/tg-bridge')
 const dir = mkdtempSync(join(tmpdir(), 'tg-x-')); const STATE = join(dir, 's'); Bun.spawnSync(['mkdir', '-p', STATE])
 writeFileSync(join(STATE, 'access.json'), JSON.stringify({ dmPolicy: 'allowlist', allowFrom: ['1'], groups: {}, chunkMode: 'newline' }))
 writeFileSync(join(STATE, '.env'), 'SECRET=1\n')
@@ -16,13 +18,13 @@ const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => 
   TELEGRAM_BOT_TOKEN: TOKEN, TELEGRAM_API_ROOT: `http://localhost:${PORT}`, TELEGRAM_STATE_DIR: STATE,
   TELEGRAM_ACCESS_MODE: 'static', TELEGRAM_ROUTER_SOCK: join(STATE, 'router.sock') } as Record<string, string>
 const mock = startMock(PORT, TOKEN)
-const router = Bun.spawn(process.env.ROUTER_BIN ? [process.env.ROUTER_BIN] : ['bun', SERVER],
-  { env: { ...env, TELEGRAM_ROLE: 'router', TELEGRAM_SPAWN_CMD: 'true' }, stdout: 'ignore', stderr: 'inherit' })
+const router = Bun.spawn([ROUTER_BIN],
+  { env: { ...env, TELEGRAM_SPAWN_CMD: 'true' }, stdout: 'ignore', stderr: 'inherit' })
 const inbox: any[] = []
 const client = new Client({ name: 't', version: '0' }, { capabilities: {} })
 client.fallbackNotificationHandler = async (n: any) => { if (n.method === 'notifications/claude/channel') inbox.push(n.params) }
-await client.connect(new StdioClientTransport({ command: process.env.BRIDGE ?? 'bun', args: process.env.BRIDGE ? [] : [SERVER],
-  env: { ...env, TELEGRAM_ROLE: 'client', TELEGRAM_ROUTE: 'dm:1', TELEGRAM_ROUTE_ADMIN: '1' } }))
+await client.connect(new StdioClientTransport({ command: BRIDGE, args: [],
+  env: { ...env, TELEGRAM_ROUTE: 'dm:1', TELEGRAM_ROUTE_ADMIN: '1' } }))
 const until = async (f: () => boolean, ms = 8000) => { const t = Date.now(); while (!f()) { if (Date.now() - t > ms) throw new Error('timeout ' + f); await Bun.sleep(50) } }
 const user = { id: 1, is_bot: false, first_name: 'A', username: 'adhika' }
 let mid = 100
