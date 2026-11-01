@@ -40,7 +40,8 @@ async function startClient(route: string, admin = false): Promise<Sess> {
     if (n.method === 'notifications/claude/channel/permission') s.perms.push(n.params)
   }
   await client.connect(new StdioClientTransport({
-    command: 'bun', args: [SERVER],
+    // BRIDGE=/path/to/tg-bridge runs every client through the Rust relay instead of an in-process bun client
+    command: process.env.BRIDGE ?? 'bun', args: process.env.BRIDGE ? [] : [SERVER],
     env: { ...baseEnv, TELEGRAM_ROLE: 'client', TELEGRAM_ROUTE: route, ...(admin ? { TELEGRAM_ROUTE_ADMIN: '1' } : {}) },
   }))
   return s
